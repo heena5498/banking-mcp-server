@@ -5,7 +5,8 @@ Claude Desktop use the [Secure Banking API](https://github.com/heena5498/secure-
 The agent can check balances and read transaction history directly, and it can move money only after
 the user has confirmed the transfer.
 
-> **Status:** Phase 2 of 7. The three read-only tools work and are tested against a mock bank.
+> **Status:** Phase 3 of 7. The three read-only tools work, with retries and agent-friendly error
+> handling, and are tested against a mock bank.
 > `transfer`, role-based permissions and the eval come in later phases. See the [roadmap](#roadmap).
 
 ## Why this project
@@ -100,7 +101,8 @@ The server reads environment variables (see [.env.example](.env.example)):
 | `BANK_API_BASE_URL` | yes | e.g. `http://localhost:8080` |
 | `BANK_API_TOKEN` | one of | A JWT from `POST /api/auth/login` |
 | `BANK_EMAIL` + `BANK_PASSWORD` | one of | The server logs in itself, and logs in again when the token expires |
-| `BANK_API_TIMEOUT_MS` | no | Default `5000` |
+| `BANK_API_TIMEOUT_MS` | no | Per-attempt timeout. Default `5000` |
+| `BANK_API_MAX_RETRIES` | no | Retries for reads after a timeout, network error, 429 or 5xx (0–5). Default `2` |
 | `LOG_LEVEL` | no | `debug` \| `info` \| `warn` \| `error` (logs go to stderr) |
 
 ### Use with Claude Desktop
@@ -133,9 +135,9 @@ src/
   index.ts            entry point: config → auth → server → stdio
   config.ts           env parsing and validation (zod)
   auth.ts             token from env, or login with automatic re-login
-  bank/client.ts      typed Secure Banking API client
+  bank/client.ts      typed API client: timeouts, retries with backoff, cancellation
   bank/types.ts       API DTOs
-  errors.ts           ToolError: the single error shape returned to the agent
+  errors.ts           ToolError + per-code policy (retryable, hint) for every API error
   format.ts           account-number masking, money formatting
   logger.ts           JSON logs to stderr, with secrets redacted
   server.ts           McpServer setup
@@ -143,5 +145,7 @@ src/
 test/
   mockBank.ts         MSW mock of the Secure Banking API
   harness.ts          connects a real MCP client to the server in memory
-  *.test.ts
+  readTools.test.ts   tool behaviour
+  failures.test.ts    retries, error mapping, cancellation
+  units.test.ts       config, formatting, logging
 ```

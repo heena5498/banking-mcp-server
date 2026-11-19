@@ -9,6 +9,7 @@ const EnvSchema = z
     BANK_EMAIL: z.preprocess(emptyToUndefined, z.string().optional()),
     BANK_PASSWORD: z.preprocess(emptyToUndefined, z.string().optional()),
     BANK_API_TIMEOUT_MS: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().default(5000)),
+    BANK_API_MAX_RETRIES: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(5).default(2)),
     LOG_LEVEL: z.preprocess(emptyToUndefined, z.enum(["debug", "info", "warn", "error"]).default("info")),
   })
   .refine((e) => e.BANK_API_TOKEN || (e.BANK_EMAIL && e.BANK_PASSWORD), {
@@ -22,6 +23,8 @@ export interface Config {
   token?: string;
   credentials?: { email: string; password: string };
   timeoutMs: number;
+  /** Retries for read requests after a network failure, timeout, 429 or 5xx. Writes are never retried. */
+  maxRetries: number;
   logLevel: LogLevel;
 }
 
@@ -38,6 +41,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     token: e.BANK_API_TOKEN,
     credentials: e.BANK_EMAIL && e.BANK_PASSWORD ? { email: e.BANK_EMAIL, password: e.BANK_PASSWORD } : undefined,
     timeoutMs: e.BANK_API_TIMEOUT_MS,
+    maxRetries: e.BANK_API_MAX_RETRIES,
     logLevel: e.LOG_LEVEL,
   };
 }

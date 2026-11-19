@@ -17,7 +17,7 @@ async function main(): Promise<void> {
 
   const logger = createLogger(config.logLevel);
   const tokens = createTokenProvider(config);
-  const bank = new BankApiClient({ baseUrl: config.baseUrl, tokens, timeoutMs: config.timeoutMs, logger });
+  const bank = new BankApiClient({ baseUrl: config.baseUrl, tokens, timeoutMs: config.timeoutMs, retry: { maxRetries: config.maxRetries }, logger });
   const server = createServer({ bank, logger });
 
   // Last-resort guards: log and keep serving rather than taking the agent's session down.

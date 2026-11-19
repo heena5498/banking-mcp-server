@@ -144,22 +144,53 @@ Every failure becomes:
   "retryable": false, "hint": "Tell the user the available balance and ask for a smaller amount." }
 ```
 
-| Source | `code` | `retryable` |
-|---|---|---|
-| Timeout, `ECONNREFUSED`, DNS failure | `BANK_UNAVAILABLE` | true |
-| HTTP 5xx | `BANK_ERROR` | true |
-| HTTP 401 | `AUTH_EXPIRED` | false |
-| HTTP 403 / `ACCOUNT_ACCESS_DENIED` | `FORBIDDEN` | false |
-| HTTP 404 / `ACCOUNT_NOT_FOUND` | `ACCOUNT_NOT_FOUND` | false |
-| HTTP 400 / `VALIDATION_FAILED`, `INVALID_AMOUNT`, `INVALID_TRANSFER` | passed through | false |
-| HTTP 409 `IDEMPOTENCY_CONFLICT`, `CONCURRENT_MODIFICATION` | passed through | true |
-| HTTP 422 `INSUFFICIENT_FUNDS`, `ACCOUNT_FROZEN`, `ACCOUNT_CLOSED` | passed through | false |
-| Role not allowed | `TOOL_NOT_PERMITTED` | false |
-| Bad, expired or used confirmation | `CONFIRMATION_INVALID` | false |
-| Anything unexpected | `INTERNAL_ERROR` | false |
+The API's own error code is passed through, because it's more specific than anything the server
+would invent. `src/errors.ts` (`API_ERROR_POLICY`) adds `retryable` and a `hint` for each code.
+
+| Source | `code` | `retryable` | Retried automatically (reads) |
+|---|---|---|---|
+| Timeout, connection refused, DNS failure | `BANK_UNAVAILABLE` | true | yes |
+| HTTP 500 / 502 / 503 / 504 | `BANK_ERROR` | true | yes |
+| HTTP 429 | `RATE_LIMITED` (hint includes the `Retry-After`) | true | yes, if `Retry-After` ≤ 5 s |
+| HTTP 2xx with an unreadable body | `BANK_ERROR` | true | no |
+| HTTP 401 | logs in again once if credentials are set, otherwise `AUTH_EXPIRED` | false | — |
+| 400 `VALIDATION_FAILED`, `MALFORMED_REQUEST`, `INVALID_AMOUNT`, `INVALID_TRANSFER` | passed through (field errors appended) | false | no |
+| 400 `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_KEY_INVALID` | passed through (a bug in this server) | false | no |
+| 403 `FORBIDDEN`, `ACCOUNT_ACCESS_DENIED` | passed through | false | no |
+| 404 `ACCOUNT_NOT_FOUND`, `USER_NOT_FOUND`, `NOT_FOUND` | passed through | false | no |
+| 409 `CONCURRENT_MODIFICATION` | passed through | **true** | no |
+| 409 `IDEMPOTENCY_CONFLICT` (same key, different request) | passed through | false | no |
+| 422 `INSUFFICIENT_FUNDS`, `ACCOUNT_FROZEN`, `ACCOUNT_CLOSED` | passed through | false | no |
+| 4xx with no recognisable body | `INVALID_REQUEST` / `FORBIDDEN` / `NOT_FOUND` / `CONFLICT` / `REQUEST_REJECTED` | false | no |
+| MCP client cancelled the call | `CANCELLED` | false | — |
+| Role not allowed (Phase 4) | `TOOL_NOT_PERMITTED` | false | — |
+| Bad, expired or used confirmation (Phase 5) | `CONFIRMATION_INVALID` | false | — |
+| Anything unexpected | `INTERNAL_ERROR` (no details) | false | — |
 
 Handlers never throw to the SDK. Every path returns a `CallToolResult`, and a top-level guard
-catches anything that slips through.
+catches anything that slips through. Messages are capped at 300 characters, and non-JSON error
+bodies (e.g. proxy HTML pages) are never shown to the agent.
+
+**Exception: invalid arguments.** The MCP SDK checks arguments against each tool's input schema
+before the handler runs, and reports a failure as plain text (`Input validation error: … accountId
+…`) rather than the JSON shape above. The SDK's error method is private, so wrapping it would be
+fragile. The text names the bad field, and a test pins this behaviour.
+
+### 5.1 Retry policy
+
+- **Only reads are retried.** Each request says whether it may be retried. Writes (Phase 5) never
+  are: a transfer is only re-sent deliberately, with the same `Idempotency-Key`.
+- **Attempts:** `1 + BANK_API_MAX_RETRIES` (default 3 in total). Each attempt has its own 5 s timeout.
+- **Backoff:** full jitter, a random delay in `[0, min(2000, 250 × 2^(n−1))]` ms, so clients
+  recovering from the same outage don't retry in lockstep.
+- **`Retry-After`:** waited out if ≤ 5 s. A longer one ends the retries, and the agent gets
+  `RATE_LIMITED` with the wait time in the hint.
+- **Re-login doesn't count as a retry.** A 401 caused by an expired token triggers one login and a
+  resend. If the bank is unreachable during login, that counts as a normal network failure.
+- **Cancellation:** the tool call's `AbortSignal` is joined with each attempt's timeout and with the
+  backoff sleep, so a cancelled call stops immediately.
+- **The agent is told what already happened.** "Tried 3 times" in the message and "already retried"
+  in the hint discourage the agent from hammering a bank that is down.
 
 ## 6. Security
 
@@ -199,7 +230,8 @@ flowchart LR
 | `BANK_API_BASE_URL` | yes | e.g. `http://localhost:8080` |
 | `BANK_API_TOKEN` | one of these | A pre-issued JWT |
 | `BANK_EMAIL` / `BANK_PASSWORD` | one of these | Log in, and log in again when the token expires |
-| `BANK_API_TIMEOUT_MS` | no | Default `5000` |
+| `BANK_API_TIMEOUT_MS` | no | Per-attempt timeout. Default `5000` |
+| `BANK_API_MAX_RETRIES` | no | Retries for reads, 0–5. Default `2` |
 | `CONFIRMATION_TTL_SECONDS` | no | Default `300` |
 | `LOG_LEVEL` | no | Default `info` |
 

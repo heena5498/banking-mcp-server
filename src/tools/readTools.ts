@@ -25,9 +25,9 @@ export function registerReadTools(server: McpServer, { bank, logger }: ToolDeps)
       inputSchema: {},
       annotations: READ_ONLY,
     },
-    () =>
+    (_args, { signal }) =>
       safely("list_accounts", logger, async () => {
-        const accounts = await bank.listAccounts();
+        const accounts = await bank.listAccounts({ signal });
         return jsonResult({ accounts: accounts.map(presentAccount) });
       }),
   );
@@ -40,9 +40,9 @@ export function registerReadTools(server: McpServer, { bank, logger }: ToolDeps)
       inputSchema: { accountId },
       annotations: READ_ONLY,
     },
-    ({ accountId }) =>
+    ({ accountId }, { signal }) =>
       safely("get_balance", logger, async () => {
-        const a = presentAccount(await bank.getAccount(accountId));
+        const a = presentAccount(await bank.getAccount(accountId, { signal }));
         return jsonResult({ accountId: a.accountId, accountNumber: a.accountNumber, balance: a.balance, status: a.status });
       }),
   );
@@ -61,9 +61,9 @@ export function registerReadTools(server: McpServer, { bank, logger }: ToolDeps)
       },
       annotations: READ_ONLY,
     },
-    ({ accountId, page, size }) =>
+    ({ accountId, page, size }, { signal }) =>
       safely("list_transactions", logger, async () => {
-        const p = await bank.listTransactions(accountId, page, size);
+        const p = await bank.listTransactions(accountId, page, size, { signal });
         return jsonResult({
           accountId,
           page: p.page,

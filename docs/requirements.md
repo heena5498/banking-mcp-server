@@ -48,10 +48,11 @@ confirmation state across restarts.
 | ID | Requirement |
 |---|---|
 | FR3.1 | No API or network failure may crash the server process. |
-| FR3.2 | Every failure is returned as an MCP tool result with `isError: true` and a JSON body `{code, message, retryable, hint}`. |
+| FR3.2 | Every failure is returned as an MCP tool result with `isError: true` and a JSON body `{code, message, retryable, hint}`. Exception: arguments that fail the tool's input schema are rejected by the MCP SDK before the handler runs, as plain text naming the bad field. |
 | FR3.3 | API error codes (`INSUFFICIENT_FUNDS`, `ACCOUNT_FROZEN`, `ACCOUNT_NOT_FOUND`, `ACCOUNT_ACCESS_DENIED`, `VALIDATION_FAILED`, …) are passed through with a hint the agent can act on. |
-| FR3.4 | A timeout or connection refusal returns `BANK_UNAVAILABLE` (`retryable: true`). A 401 returns `AUTH_EXPIRED` (`retryable: false`). |
-| FR3.5 | Read calls time out after 5 seconds and retry up to twice, with backoff, on network errors or 5xx responses. Transfer execution is never retried automatically. |
+| FR3.4 | A timeout or connection failure returns `BANK_UNAVAILABLE`, a 5xx returns `BANK_ERROR`, and a 429 returns `RATE_LIMITED` (all `retryable: true`). A 401 that can't be fixed by logging in again returns `AUTH_EXPIRED` (`retryable: false`). |
+| FR3.5 | Read calls time out after 5 seconds and retry up to twice (configurable, 0–5) with exponential backoff and jitter, on network errors, timeouts, 429 and 500/502/503/504. A `Retry-After` of up to 5 seconds is honoured; a longer one is returned to the agent instead. 4xx errors are never retried. Transfer execution is never retried automatically. |
+| FR3.7 | If the MCP client cancels a tool call, in-flight requests and pending retries stop, and the tool returns `CANCELLED`. |
 | FR3.6 | Error output never includes stack traces, tokens or internal URLs. |
 
 ### FR4: Permissions

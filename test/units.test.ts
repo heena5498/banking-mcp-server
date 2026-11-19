@@ -52,7 +52,7 @@ describe("errorResult", () => {
     const r = errorResult(new TypeError("Cannot read properties of undefined (reading 'secret')"));
     expect(r.isError).toBe(true);
     const text = (r.content[0] as { text: string }).text;
-    expect(JSON.parse(text)).toEqual({ code: "INTERNAL_ERROR", message: expect.any(String), retryable: false });
+    expect(JSON.parse(text)).toEqual({ code: "INTERNAL_ERROR", message: expect.any(String), retryable: false, hint: expect.any(String) });
     expect(text).not.toContain("secret");
   });
 
