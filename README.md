@@ -64,19 +64,19 @@ Anthropic API (eval)
 
 ## Roadmap
 
-| Phase | Scope | Status |
+| Phase | Scope
 |---|---|---|
-| 1 | Requirements, architecture, HLD, repo setup | ✅ Done |
-| 2 | TypeScript scaffold, API client, read-only tools | ⏳ Next |
-| 3 | Failure handling and error mapping | Planned |
-| 4 | JWT role-based tool permissions | Planned |
-| 5 | `transfer` with server-enforced confirmation | Planned |
-| 6 | Eval suite (10–15 prompts) | Planned |
-| 7 | Claude Desktop setup guide, CI, demo | Planned |
+| 1 | Requirements, architecture, HLD, repo setup
+| 2 | TypeScript scaffold, API client, read-only tools
+| 3 | Failure handling and error mapping
+| 4 | JWT role-based tool permissions
+| 5 | `transfer` with server-enforced confirmation
+| 6 | Eval suite (10–15 prompts)
+| 7 | Claude Desktop setup guide, CI, demo
 
 ## Getting started
 
-Setup instructions will be added in Phase 2, when there is code to run. You will need:
+You will need:
 
 - Node.js 22+
 - A running [Secure Banking API](https://github.com/heena5498/secure-banking-application) (Docker +
