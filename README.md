@@ -5,8 +5,8 @@ Claude Desktop use the [Secure Banking API](https://github.com/heena5498/secure-
 The agent can check balances and read transaction history directly, and it can move money only after
 the user has confirmed the transfer.
 
-> **Status:** Phase 1 of 7 (design). The design is written down; no server code exists yet. See the
-> [roadmap](#roadmap).
+> **Status:** Phase 2 of 7. The three read-only tools work and are tested against a mock bank.
+> `transfer`, role-based permissions and the eval come in later phases. See the [roadmap](#roadmap).
 
 ## Why this project
 
@@ -65,7 +65,7 @@ Anthropic API (eval)
 ## Roadmap
 
 | Phase | Scope
-|---|---|---|
+|---|---|
 | 1 | Requirements, architecture, HLD, repo setup
 | 2 | TypeScript scaffold, API client, read-only tools
 | 3 | Failure handling and error mapping
@@ -76,9 +76,72 @@ Anthropic API (eval)
 
 ## Getting started
 
-You will need:
+### Prerequisites
 
 - Node.js 22+
 - A running [Secure Banking API](https://github.com/heena5498/secure-banking-application) (Docker +
-  Java 25), or the mock API included for tests
+  Java 25). Not needed for the tests, which use a mock bank.
 - Claude Desktop, or any MCP client
+
+### Install, build and test
+
+```bash
+npm install
+npm run build     # compiles to dist/
+npm test          # unit + MCP protocol tests against the mock bank (no API needed)
+```
+
+### Configuration
+
+The server reads environment variables (see [.env.example](.env.example)):
+
+| Variable | Required | Description |
+|---|---|---|
+| `BANK_API_BASE_URL` | yes | e.g. `http://localhost:8080` |
+| `BANK_API_TOKEN` | one of | A JWT from `POST /api/auth/login` |
+| `BANK_EMAIL` + `BANK_PASSWORD` | one of | The server logs in itself, and logs in again when the token expires |
+| `BANK_API_TIMEOUT_MS` | no | Default `5000` |
+| `LOG_LEVEL` | no | `debug` \| `info` \| `warn` \| `error` (logs go to stderr) |
+
+### Use with Claude Desktop
+
+Add this to `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Claude/`), then
+restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "banking": {
+      "command": "node",
+      "args": ["/absolute/path/to/banking-mcp-server/dist/index.js"],
+      "env": {
+        "BANK_API_BASE_URL": "http://localhost:8080",
+        "BANK_EMAIL": "you@example.com",
+        "BANK_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+Then ask something like *"What's the balance of my checking account?"*
+
+### Project layout
+
+```
+src/
+  index.ts            entry point: config → auth → server → stdio
+  config.ts           env parsing and validation (zod)
+  auth.ts             token from env, or login with automatic re-login
+  bank/client.ts      typed Secure Banking API client
+  bank/types.ts       API DTOs
+  errors.ts           ToolError: the single error shape returned to the agent
+  format.ts           account-number masking, money formatting
+  logger.ts           JSON logs to stderr, with secrets redacted
+  server.ts           McpServer setup
+  tools/readTools.ts  list_accounts, get_balance, list_transactions
+test/
+  mockBank.ts         MSW mock of the Secure Banking API
+  harness.ts          connects a real MCP client to the server in memory
+  *.test.ts
+```
